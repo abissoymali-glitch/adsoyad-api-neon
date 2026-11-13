@@ -20,33 +20,36 @@ export async function POST(req) {
 
     let results = [];
 
-    // TC ile sorgulama (TÜM veritabanlarına aynı anda bak)
+    // TC ile sorgulama
     if (tc) {
       const sql = "SELECT * FROM kisiler WHERE tc = $1 LIMIT 10";
       const args = [tc];
 
-      // Tüm pool'lara istek at
-      const promises = Object.values(pools).map(pool => pool.query(sql, args));
+      // Her veritabanına ayrı ayrı istek at, hata vereni yoksay
+      const promises = Object.values(pools).map(pool => 
+        pool.query(sql, args).catch(err => {
+          console.error("Bir veritabanında TC sorgu hatası:", err.message);
+          return { rows: [] }; // Hata verirse boş sonuç döndür
+        })
+      );
       
-      try {
-        const dbResults = await Promise.all(promises);
-        // Gelen tüm sonuçları birleştir
-        dbResults.forEach(res => { results = results.concat(res.rows); });
-        results = results.slice(0, 10); // İlk 10 sonucu tut
-      } catch (err) {
-        console.error("TC sorgu hatası:", err);
-        // Bir veritabanı hata verirse diğerlerini es geçme, hata mesajını dön
-        return NextResponse.json({ hata: "Veritabanı bağlantı hatası", detay: err.message }, { status: 500 });
-      }
+      const dbResults = await Promise.all(promises);
+      dbResults.forEach(res => { results = results.concat(res.rows); });
+      results = results.slice(0, 10);
     } 
-    // Ad ve Soyad ile sorgulama (TÜM veritabanlarına aynı anda bak)
+    // Ad ve Soyad ile sorgulama
     else if (ad && soyad) {
       const sql = "SELECT * FROM kisiler WHERE ad ILIKE $1 AND soyad ILIKE $2 LIMIT 10";
       const args = [`%${ad}%`, `%${soyad}%`];
 
-      const promises = Object.values(pools).map(pool => pool.query(sql, args));
-      const dbResults = await Promise.all(promises);
+      const promises = Object.values(pools).map(pool => 
+        pool.query(sql, args).catch(err => {
+          console.error("Bir veritabanında Ad Soyad sorgu hatası:", err.message);
+          return { rows: [] };
+        })
+      );
       
+      const dbResults = await Promise.all(promises);
       dbResults.forEach(res => { results = results.concat(res.rows); });
       results = results.slice(0, 10);
     }

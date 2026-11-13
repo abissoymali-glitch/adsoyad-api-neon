@@ -20,20 +20,26 @@ export async function POST(req) {
 
     let results = [];
 
-    // TC ile sorgulama (Hangi veritabanına gideceğini TC'nin ilk 2 hanesine göre seç)
+    // TC ile sorgulama (TÜM veritabanlarına aynı anda bak)
     if (tc) {
-      const prefix = parseInt(tc.substring(0, 2), 10);
-      let dbIndex = 1;
-      
-      if (prefix >= 34 && prefix <= 66) dbIndex = 2;
-      else if (prefix >= 67 && prefix <= 99) dbIndex = 3;
-      // 4. veritabanı (yedek veya özel aralık için kullanılabilir, şimdilik 1-3 arası dağıtıyoruz)
-
       const sql = "SELECT * FROM kisiler WHERE tc = $1 LIMIT 10";
-      const res = await pools[dbIndex].query(sql, [tc]);
-      results = res.rows;
+      const args = [tc];
+
+      // Tüm pool'lara istek at
+      const promises = Object.values(pools).map(pool => pool.query(sql, args));
+      
+      try {
+        const dbResults = await Promise.all(promises);
+        // Gelen tüm sonuçları birleştir
+        dbResults.forEach(res => { results = results.concat(res.rows); });
+        results = results.slice(0, 10); // İlk 10 sonucu tut
+      } catch (err) {
+        console.error("TC sorgu hatası:", err);
+        // Bir veritabanı hata verirse diğerlerini es geçme, hata mesajını dön
+        return NextResponse.json({ hata: "Veritabanı bağlantı hatası", detay: err.message }, { status: 500 });
+      }
     } 
-    // Ad ve Soyad ile sorgulama (Tüm veritabanlarına aynı anda bak)
+    // Ad ve Soyad ile sorgulama (TÜM veritabanlarına aynı anda bak)
     else if (ad && soyad) {
       const sql = "SELECT * FROM kisiler WHERE ad ILIKE $1 AND soyad ILIKE $2 LIMIT 10";
       const args = [`%${ad}%`, `%${soyad}%`];
@@ -41,7 +47,6 @@ export async function POST(req) {
       const promises = Object.values(pools).map(pool => pool.query(sql, args));
       const dbResults = await Promise.all(promises);
       
-      // Tüm sonuçları birleştir ve ilk 10'u al
       dbResults.forEach(res => { results = results.concat(res.rows); });
       results = results.slice(0, 10);
     }
@@ -52,4 +57,4 @@ export async function POST(req) {
     console.error("API Hatası:", error);
     return NextResponse.json({ hata: "Sunucu hatası", detay: error.message }, { status: 500 });
   }
-                              }
+}

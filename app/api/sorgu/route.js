@@ -22,7 +22,7 @@ export async function POST(req) {
 
     // TC ile sorgulama
     if (tc) {
-      const sql = "SELECT * FROM kisiler WHERE tc = $1 LIMIT 10";
+      const sql = "SELECT * FROM kisiler WHERE tc::text = $1::text LIMIT 10";
       const args = [tc];
 
       // Her veritabanına ayrı ayrı istek at, hata vereni yoksay
